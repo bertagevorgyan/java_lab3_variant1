@@ -4,13 +4,12 @@ import java.util.concurrent.locks.*;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
-// ==================== ОСНОВНЫЕ ПЕРЕЧИСЛЕНИЯ ====================
 
-// Перечисление статусов лифта
+// возможные статусы лифта
 enum ElevatorStatus {
-    IDLE("IDLE"), // Лифт стоит на этаже, без движения
-    MOVING("MOVING"), // Лифт движется между этажами
-    DOORS_OPEN("DOORS OPEN"); // Лифт остановился, двери открыты
+    IDLE("IDLE"), // лифт стоит на этаже, без движения
+    MOVING("MOVING"), // лифт движется 
+    DOORS_OPEN("DOORS OPEN"); // лифт остановился, двери открыты
 
     private final String description;
 
@@ -23,11 +22,11 @@ enum ElevatorStatus {
     }
 }
 
-// Перечисление направлений движения
+// направления движения 
 enum Direction {
-    UP("UP"), // Движение вверх
-    DOWN("DOWN"), // Движение вниз
-    NONE("NONE"); // Нет направления (лифт стоит)
+    UP("UP"), // движение вверх
+    DOWN("DOWN"), // движение вниз
+    NONE("NONE"); // нет направления (лифт стоит)
 
     private final String description;
 
@@ -40,12 +39,11 @@ enum Direction {
     }
 }
 
-// ==================== КЛАССЫ ДЛЯ ХРАНЕНИЯ ЗАПРОСОВ ====================
 
-// Класс для внутреннего запроса пассажира (выбор этажа в лифте)
+//класс для внутреннего запроса пассажира (выбор этажа в лифте)
 class InternalRequest {
-    private final int targetFloor; // Целевой этаж
-    private final long timestamp; // Время создания запроса
+    private final int targetFloor; //целевой этаж
+    private final long timestamp; //время создания запроса
 
     public InternalRequest(int targetFloor) {
         this.targetFloor = targetFloor;
@@ -66,11 +64,11 @@ class InternalRequest {
     }
 }
 
-// Класс для внешнего запроса (вызов лифта с этажа)
+//класс для внешнего запроса (вызов лифта с этажа)
 class ExternalRequest {
-    private final int floor; // Этаж, с которого вызывают лифт
-    private final Direction direction; // Направление, в котором хочет ехать пассажир
-    private final long timestamp; // Время создания запроса
+    private final int floor; //этаж, с которого вызывают лифт
+    private final Direction direction; //направление, в котором хочет ехать пассажир
+    private final long timestamp; //время создания запроса
 
     public ExternalRequest(int floor, Direction direction) {
         this.floor = floor;
@@ -96,68 +94,65 @@ class ExternalRequest {
     }
 }
 
-// ==================== КЛАСС ЛИФТА ====================
-
 /**
- * Класс Elevator представляет один лифт в системе.
- * Каждый лифт работает в отдельном потоке (implements Runnable).
- * Лифт имеет состояние, обрабатывает запросы и перемещается между этажами.
+ * класс Elevator представляет один лифт в системе.
+ * каждый лифт работает в отдельном потоке.
+ * лифт имеет состояние, обрабатывает запросы и перемещается между этажами.
  */
 class Elevator implements Runnable {
-    private final int id; // Уникальный идентификатор лифта
-    private int currentFloor; // Текущий этаж
-    private Direction direction; // Текущее направление движения
-    private ElevatorStatus status; // Текущий статус
-    private final int maxFloor; // Максимальный этаж в здании
-    private final int minFloor = 1; // Минимальный этаж (обычно 1)
+    private final int id; //уникальный идентификатор лифта
+    private int currentFloor; 
+    private Direction direction; 
+    private ElevatorStatus status; 
+    private final int maxFloor; 
+    private final int minFloor = 1;  
 
-    // Очередь внутренних запросов (выбор этажей внутри лифта)
+    //очередь внутренних запросов (выбор этажей внутри лифта)
     private final BlockingQueue<InternalRequest> internalRequests;
 
-    // Множество этажей, на которых нужно остановиться
+    //множество этажей, на которых нужно остановиться
     private final Set<Integer> pendingFloors;
 
-    // Примитивы синхронизации для потокобезопасности
+    //примитивы синхронизации для потокобезопасности
     private final ReentrantLock lock; // Замок для синхронизации
     private final Condition condition; // Условие для ожидания работы
 
-    private volatile boolean running = true; // Флаг работы потока лифта
-    private int passengerCount = 0; // Количество пассажиров в лифте
-    private final int maxCapacity = 10; // Максимальная вместимость лифта
+    private volatile boolean running = true; //флаг работы потока лифта
+    private int passengerCount = 0; 
+    private final int maxCapacity = 10; //максимальная вместимость лифта
 
-    private final Logger logger = Logger.getInstance(); // Логгер для записи событий
+    private final Logger logger = Logger.getInstance(); //логгер для записи событий
 
     /**
-     * Конструктор лифта
+     * конструктор лифта
      * 
      * @param id       - идентификатор лифта
      * @param maxFloor - максимальный этаж в здании
      */
     public Elevator(int id, int maxFloor) {
         this.id = id;
-        this.currentFloor = 1; // Лифт начинает с 1 этажа
+        this.currentFloor = 1; 
         this.direction = Direction.NONE;
         this.status = ElevatorStatus.IDLE;
         this.maxFloor = maxFloor;
-        // Используем потокобезопасные коллекции
+        //используем потокобезопасные коллекции
         this.internalRequests = new LinkedBlockingQueue<>();
         this.pendingFloors = new HashSet<>();
         this.lock = new ReentrantLock();
         this.condition = lock.newCondition();
     }
 
-    // ==================== ГЕТТЕРЫ ====================
 
     public int getId() {
         return id;
     }
 
     public int getCurrentFloor() {
-        lock.lock(); // Блокируем для безопасного доступа из других потоков
+        lock.lock(); //блокируем для безопасного доступа из других потоков
         try {
             return currentFloor;
         } finally {
-            lock.unlock(); // Всегда разблокируем в finally
+            lock.unlock(); //всегда разблокируем в finally
         }
     }
 
@@ -187,49 +182,48 @@ class Elevator implements Runnable {
         return passengerCount < maxCapacity;
     }
 
-    // ==================== МЕТОДЫ ДОБАВЛЕНИЯ ЗАПРОСОВ ====================
 
     /**
-     * Добавление внешнего запроса (вызов лифта с этажа)
+     * добавление внешнего запроса (вызов лифта с этажа)
      * 
      * @param floor - этаж вызова
      * @param dir   - направление движения
      * @return true если запрос принят
      */
     public boolean addExternalRequest(int floor, Direction dir) {
-        lock.lock(); // Захватываем замок для синхронизации
+        lock.lock(); //захватываем замок для синхронизации
         try {
-            // Если лифт уже должен остановиться на этом этаже, возвращаем true
+            //если лифт уже должен остановиться на этом этаже, возвращаем true
             if (pendingFloors.contains(floor)) {
                 return true;
             }
 
-            // Добавляем этаж в список ожидаемых остановок
+            //добавляем этаж в список ожидаемых остановок
             pendingFloors.add(floor);
             logger.logElevator(id, "Accepted external request for floor " + floor +
                     " (direction: " + dir + ")");
 
-            // Если лифт стоит без направления, задаем направление
+            //если лифт стоит без направления, задаем направление
             if (direction == Direction.NONE) {
                 direction = (floor > currentFloor) ? Direction.UP : Direction.DOWN;
                 status = ElevatorStatus.MOVING;
-                condition.signalAll(); // Будим поток лифта, если он ждет
+                condition.signalAll(); //будим поток лифта, если он ждет
             }
 
             return true;
         } finally {
-            lock.unlock(); // Всегда освобождаем замок
+            lock.unlock(); //всегда освобождаем замок
         }
     }
 
     /**
-     * Добавление внутреннего запроса (выбор этажа в лифте)
+     * добавление внутреннего запроса (выбор этажа в лифте)
      * 
      * @param targetFloor - целевой этаж
      * @return true если запрос принят
      */
     public boolean addInternalRequest(int targetFloor) {
-        // Проверка корректности этажа
+        //проверка корректности этажа
         if (targetFloor < minFloor || targetFloor > maxFloor) {
             logger.logElevator(id, "ERROR: Invalid floor " + targetFloor);
             return false;
@@ -237,23 +231,23 @@ class Elevator implements Runnable {
 
         lock.lock();
         try {
-            // Проверка вместимости лифта
+            //проверка вместимости лифта
             if (!canAcceptPassenger()) {
                 logger.logElevator(id, "FULL: Elevator full! Max 10 passengers.");
                 return false;
             }
 
-            // Создаем и добавляем запрос
+            //создаем и добавляем запрос
             InternalRequest request = new InternalRequest(targetFloor);
             internalRequests.offer(request);
             pendingFloors.add(targetFloor);
 
-            // Увеличиваем счетчик пассажиров
+            //увеличиваем счетчик пассажиров
             passengerCount++;
             logger.logElevator(id, "Passenger entered. Target floor " + targetFloor +
                     " (passengers: " + passengerCount + ")");
 
-            // Если лифт стоит, начинаем движение
+            //если лифт стоит, начинаем движение
             if (direction == Direction.NONE) {
                 direction = (targetFloor > currentFloor) ? Direction.UP : Direction.DOWN;
                 status = ElevatorStatus.MOVING;
@@ -266,10 +260,9 @@ class Elevator implements Runnable {
         }
     }
 
-    // ==================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ====================
 
     /**
-     * Пассажир выходит из лифта
+     *пассажир выходит из лифта
      */
     public void passengerExits() {
         lock.lock();
@@ -284,33 +277,33 @@ class Elevator implements Runnable {
     }
 
     /**
-     * Остановка работы лифта (завершение потока)
+     * остановка работы лифта (завершение потока)
      */
     public void stop() {
-        running = false; // Устанавливаем флаг завершения
+        running = false; //устанавливаем флаг завершения
         lock.lock();
         try {
-            condition.signalAll(); // Будим поток, если он ждет
+            condition.signalAll(); //будим поток, если он ждет
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * Перемещение лифта на один этаж
+     * перемещение лифта на один этаж
      */
     private void move() {
         lock.lock();
         try {
             if (direction == Direction.UP) {
                 currentFloor++;
-                // Если достигли верхнего этажа, меняем направление
+                //если достигли верхнего этажа, меняем направление
                 if (currentFloor >= maxFloor) {
                     direction = Direction.DOWN;
                 }
             } else if (direction == Direction.DOWN) {
                 currentFloor--;
-                // Если достигли нижнего этажа, меняем направление
+                //если достигли нижнего этажа, меняем направление
                 if (currentFloor <= minFloor) {
                     direction = Direction.UP;
                 }
@@ -323,12 +316,12 @@ class Elevator implements Runnable {
     }
 
     /**
-     * Обработка текущего этажа (остановка, если нужно)
+     * обработка текущего этажа (остановка, если нужно)
      */
     private void processFloor() {
         lock.lock();
         try {
-            // Проверяем, нужно ли останавливаться на текущем этаже
+            //проверяем, нужно ли останавливаться на текущем этаже
             if (pendingFloors.contains(currentFloor)) {
                 status = ElevatorStatus.DOORS_OPEN;
                 logger.logElevator(id, "--------------------------------------------------");
@@ -388,7 +381,6 @@ class Elevator implements Runnable {
                 // Ожидание, пока есть работа для лифта
                 while (running && pendingFloors.isEmpty() && internalRequests.isEmpty()) {
                     try {
-                        // Ждем 100 мс или пока нас не разбудят
                         condition.await(100, TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -494,7 +486,6 @@ class Elevator implements Runnable {
     }
 }
 
-// ==================== КЛАСС ДИСПЕТЧЕРА ====================
 
 /**
  * Класс Dispatcher отвечает за распределение запросов между лифтами.
@@ -505,7 +496,7 @@ class Dispatcher implements Runnable {
     private final BlockingQueue<ExternalRequest> externalRequests; // Очередь внешних запросов
     private volatile boolean running = true; // Флаг работы потока диспетчера
     private final Logger logger = Logger.getInstance();
-    private final int maxFloor; // Максимальный этаж
+    private final int maxFloor; 
 
     public Dispatcher(List<Elevator> elevators, int maxFloor) {
         this.elevators = elevators;
@@ -595,7 +586,6 @@ class Dispatcher implements Runnable {
     }
 }
 
-// ==================== КЛАСС ЛОГГЕРА ====================
 
 /**
  * Класс Logger обеспечивает потокобезопасное логирование событий.
@@ -656,8 +646,6 @@ class Logger {
         log("INFO", message);
     }
 }
-
-// ==================== ГЛАВНЫЙ КЛАСС ====================
 
 /**
  * Основной класс системы управления лифтами.
@@ -939,4 +927,5 @@ public class ElevatorSystemSimulation {
         logger.logSystem("SIMULATION COMPLETED");
         logger.logSystem("==========================================");
     }
+
 }
